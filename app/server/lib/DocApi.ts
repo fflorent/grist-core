@@ -99,7 +99,7 @@ import * as path from 'path';
 import * as t from "ts-interface-checker";
 import {Checker} from "ts-interface-checker";
 import uuidv4 from "uuid/v4";
-import { Document } from "app/gen-server/entity/Document";
+import {Document} from "app/gen-server/entity/Document";
 
 // Cap on the number of requests that can be outstanding on a single document via the
 // rest doc api.  When this limit is exceeded, incoming requests receive an immediate
