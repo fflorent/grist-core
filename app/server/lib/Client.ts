@@ -566,7 +566,7 @@ export class Client {
   // Fetch the user database record from profile.email, or null when profile is not set.
   private async _fetchUser(dbManager: HomeDBManager): Promise<User|undefined> {
     return this._profile && this._profile.email ?
-      await dbManager.getUserByLogin(this._profile.email) :
+      await dbManager.getUserByLoginOrCreate(this._profile.email) :
       undefined;
   }
 

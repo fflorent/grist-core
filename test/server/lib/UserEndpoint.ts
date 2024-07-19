@@ -3,12 +3,10 @@ import axios from 'axios';
 import { tmpdir } from 'os';
 import path from 'path';
 import { configForUser } from 'test/gen-server/testUtils';
-import {main as mergedServerMain} from 'app/server/mergedServerMain';
 import { prepareFilesystemDirectoryForTests } from './helpers/PrepareFilesystemDirectoryForTests';
-import { createInitialDb, setUpDB } from 'test/gen-server/seed';
 import { EnvironmentSnapshot } from '../testUtils';
-import { FlexServer } from 'app/server/lib/FlexServer';
-
+import { prepareDatabase } from './helpers/PrepareDatabase';
+import { TestServer } from './helpers/TestServer';
 
 const username = process.env.USER || "nobody";
 const tmpDir = path.join(tmpdir(), `grist_test_${username}_userendpoint`);
@@ -18,24 +16,25 @@ const nobody = configForUser('Anonymous');
 const kiwi = configForUser('Kiwi');
 
 describe('UserEndpoint', function () {
+  const SUITENAME = 'UserEndpoint';
   this.timeout(30000);
-  let server: FlexServer;
+  let server: TestServer;
   let userEndpoint: string;
   let env: EnvironmentSnapshot;
-  before(async function () {
-    env = new EnvironmentSnapshot();
+  before(async () => {
+    env = new EnvironmentSnapshot(); // FIXME: still useful?
     await prepareFilesystemDirectoryForTests(tmpDir);
-    setUpDB(this);
-    await createInitialDb();
-    process.env.GRIST_DEFAULT_EMAIL = 'chimpy@getgrist.com';
-    const server = await mergedServerMain(0, ['home', 'docs']);
-    // server = await TestServer.startServer('home,docs', tmpDir, SUITENAME, additionalEnvConfiguration);
-    userEndpoint = `${server.getOwnUrl()}/users/`;
+    await prepareDatabase(tmpDir);
+    const additionalEnvConfiguration = {
+      GRIST_DEFAULT_EMAIL: 'chimpy@getgrist.com'
+    };
+    server = await TestServer.startServer('home,docs', tmpDir, SUITENAME, additionalEnvConfiguration);
+    userEndpoint = `${server.serverUrl}/users`;
   });
 
   after(async function () {
     env.restore();
-    await server.close();
+    await server.stop();
   });
 
   describe('POST /users', function () {
@@ -87,6 +86,21 @@ describe('UserEndpoint', function () {
       assert.equal(res.data.logins[0].displayEmail, validPostPayload.email,
         'passed email corresponds to displayEmail');
     });
+
+    it('should disallow 2 users with the same email to exist', async () => {
+      const res = await axios.post(userEndpoint, {...validPostPayload, email: 'chimpy@getgrist.com'}, chimpy);
+      assert.equal(res.status, 409); // CONFLICT status code
+      assert.match(res.data.error, /already exists/);
+    });
+  });
+
+  describe('GET /users/', function () {
+    it('should retrieve users', async () => {
+      const res = await axios.get(userEndpoint, chimpy);
+      assert.equal(res.status, 200);
+      assert.ok(Array.isArray(res.data));
+      assert.ok(res.data.length > 1);
+    });
   });
 
   describe('GET /users/:id', function () {
@@ -98,10 +112,9 @@ describe('UserEndpoint', function () {
     it('should retrieve a user', async () => {
       const creationRes = await axios.post(userEndpoint, creationPayload, chimpy);
 
-      console.log(creationRes.data);
       assert.equal(creationRes.status, 200);
       const userId = creationRes.data.id;
-      const res = await axios.get(`/${userEndpoint}/:${userId}`, chimpy);
+      const res = await axios.get(`${userEndpoint}/${userId}`, chimpy);
       assert.equal(res.status, 200);
       assert.equal(res.data.name, creationPayload.name);
     });

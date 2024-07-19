@@ -1157,6 +1157,7 @@ export class FlexServer implements GristServer {
       forcedLoginMiddleware,
       checkPermissionToUserEndpoint,
       userRoute,
+      jsonErrorHandler
     );
   }
 
