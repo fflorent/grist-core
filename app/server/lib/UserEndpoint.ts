@@ -9,6 +9,7 @@ import log from 'app/server/lib/log';
 import { HomeDBManager } from 'app/gen-server/lib/homedb/HomeDBManager';
 import { isEmail } from 'app/common/gutil';
 import { expressWrap } from './expressWrap';
+import { integerParam } from './requestUtils';
 
 const {
   UserProfile
@@ -49,18 +50,20 @@ const buildUserRoute = (dbManager: HomeDBManager) => {
     if (!isEmail(profile.email)) {
       throw new ApiError('Invalid email: ' + email, 400);
     }
-    await dbManager.ensureExternalUser(profile);
-    const user = await dbManager.getUserByLogin(email);
+    const user = await dbManager.createUser(profile);
     res.status(200).json(user);
   }));
 
   userRoute.get('/:id', expressWrap(async (req, res) => {
-    const userId = parseInt(req.params.id, 10);
-    if (Number.isNaN(userId)) {
-      throw new ApiError('Invalid user id, expected number: ' + req.params.id, 400);
-    }
-    const user = dbManager.getUser(userId);
+    const userId = integerParam(req.params.id, 'id');
+    console.log('id = ', userId);
+    const user = await dbManager.getUser(userId);
     res.status(200).json(user);
+  }));
+
+  userRoute.get('/', expressWrap(async (req, res) => {
+    const users = await dbManager.getAllUsers();
+    res.status(200).json(users);
   }));
 
   return userRoute;

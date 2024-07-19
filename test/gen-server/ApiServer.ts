@@ -49,9 +49,9 @@ describe('ApiServer', function() {
     homeUrl = await server.start(['home', 'docs']);
     dbManager = server.dbManager;
 
-    chimpyRef = await dbManager.getUserByLogin(chimpyEmail).then((user) => user.ref);
-    kiwiRef = await dbManager.getUserByLogin(kiwiEmail).then((user) => user.ref);
-    charonRef = await dbManager.getUserByLogin(charonEmail).then((user) => user.ref);
+    chimpyRef = await dbManager.getUserByLoginOrCreate(chimpyEmail).then((user) => user.ref);
+    kiwiRef = await dbManager.getUserByLoginOrCreate(kiwiEmail).then((user) => user.ref);
+    charonRef = await dbManager.getUserByLoginOrCreate(charonEmail).then((user) => user.ref);
 
     // Listen to user count updates and add them to an array.
     dbManager.on('userChange', ({org, countBefore, countAfter}: UserChange) => {
@@ -2069,7 +2069,7 @@ describe('ApiServer', function() {
 
     // create a new user
     const profile = {email: 'meep@getgrist.com', name: 'Meep'};
-    const user = await dbManager.getUserByLogin('meep@getgrist.com', {profile});
+    const user = await dbManager.getUserByLoginOrCreate('meep@getgrist.com', {profile});
     const userId = user.id;
     // set up an api key
     await dbManager.connection.query("update users set api_key = 'api_key_for_meep' where id = $1", [userId]);
@@ -2107,7 +2107,7 @@ describe('ApiServer', function() {
     assert.equal(resp.status, 200);
 
     // create a user with a blank name
-    const userBlank = await dbManager.getUserByLogin('blank@getgrist.com',
+    const userBlank = await dbManager.getUserByLoginOrCreate('blank@getgrist.com',
                                                      {profile: {email: 'blank@getgrist.com',
                                                       name: ''}});
     await dbManager.connection.query("update users set api_key = 'api_key_for_blank' where id = $1", [userBlank.id]);

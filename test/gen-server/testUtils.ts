@@ -45,7 +45,7 @@ export function configWithPermit(config: AxiosRequestConfig, permitKey: string):
 export async function createUser(dbManager: HomeDBManager, name: string): Promise<Organization> {
   const username = name.toLowerCase();
   const email = `${username}@getgrist.com`;
-  const user = await dbManager.getUserByLogin(email, {profile: {email, name}});
+  const user = await dbManager.getUserByLoginOrCreate(email, {profile: {email, name}});
   user.apiKey = `api_key_for_${username}`;
   await user.save();
   const userHome = (await dbManager.getOrg({userId: user.id}, null)).data;

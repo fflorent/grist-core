@@ -341,7 +341,7 @@ export async function addRequestUser(
             userOptions.authSubject = sessionUser.authSubject;
           }
           // In this special case of initially linking a profile, we need to look up the user's info.
-          mreq.user = await dbManager.getUserByLogin(option.email, {userOptions});
+          mreq.user = await dbManager.getUserByLoginOrCreate(option.email, {userOptions});
           mreq.userId = option.id;
           mreq.userIsAuthorized = true;
         } else {
