@@ -419,7 +419,7 @@ export class HomeUtil {
   private async _deleteUserByEmail(email: string) {
     if (this.server.isExternalServer()) { throw new Error('not supported'); }
     const dbManager = await this.server.getDatabase();
-    const user = await dbManager.getUserByLogin(email);
+    const user = await dbManager.getUserByLoginOrCreate(email);
     await dbManager.deleteUser({userId: user.id}, user.id, user.name);
   }
 
@@ -427,7 +427,7 @@ export class HomeUtil {
   private async _setFirstLogin(email: string, isFirstLogin: boolean) {
     if (this.server.isExternalServer()) { throw new Error('not supported'); }
     const dbManager = await this.server.getDatabase();
-    const user = await dbManager.getUserByLogin(email);
+    const user = await dbManager.getUserByLoginOrCreate(email);
     user.isFirstTimeUser = isFirstLogin;
     await user.save();
   }
@@ -435,7 +435,7 @@ export class HomeUtil {
   private async _initShowGristTour(email: string, showGristTour: boolean) {
     if (this.server.isExternalServer()) { throw new Error('not supported'); }
     const dbManager = await this.server.getDatabase();
-    const user = await dbManager.getUserByLogin(email);
+    const user = await dbManager.getUserByLoginOrCreate(email);
     if (user && user.personalOrg) {
       const userOrgPrefs = {showGristTour};
       await dbManager.updateOrg({userId: user.id}, user.personalOrg.id, {userOrgPrefs});
@@ -460,7 +460,7 @@ export class HomeUtil {
     }
 
     const dbManager = await this.server.getDatabase();
-    const user = await dbManager.getUserByLogin(email);
+    const user = await dbManager.getUserByLoginOrCreate(email);
 
     if (user.personalOrg) {
       const org = await dbManager.getOrg({userId: user.id}, user.personalOrg.id);

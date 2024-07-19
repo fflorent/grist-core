@@ -69,7 +69,7 @@ const gu = {
     session = await gu.session().user('userz');
     const dbManager = await server.getDatabase();
     const profile = {email: session.email, name: session.name};
-    await dbManager.getUserByLogin(session.email, {profile});
+    await dbManager.getUserByLoginOrCreate(session.email, {profile});
     await gu.setApiKey(session.name);
     await session.login();
   },

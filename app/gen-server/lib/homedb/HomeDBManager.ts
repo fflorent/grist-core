@@ -431,6 +431,10 @@ export class HomeDBManager extends EventEmitter {
     return this._usersManager.testClearUserPrefs(emails);
   }
 
+  public async getAllUsers(): Promise<User[]> {
+    return this._usersManager.getAllUsers();
+  }
+
   public async getUserByKey(apiKey: string): Promise<User|undefined> {
     return this._usersManager.getUserByKey(apiKey);
   }
@@ -461,6 +465,13 @@ export class HomeDBManager extends EventEmitter {
     return this._usersManager.ensureExternalUser(profile);
   }
 
+  /**
+   * @see UsersManager.prototype.createUser
+   */
+  public async createUser(profile: UserProfile) {
+    return this._usersManager.createUser(profile);
+  }
+
   public async updateUser(userId: number, props: UserProfileChange) {
     const { user, isWelcomed } = await this._usersManager.updateUser(userId, props);
     if (user && isWelcomed) {
@@ -480,10 +491,10 @@ export class HomeDBManager extends EventEmitter {
   }
 
   /**
-   * @see UsersManager.prototype.getUserByLogin
+   * @see UsersManager.prototype.getUserByLoginOrCreate
    */
-  public async getUserByLogin(email: string, options: GetUserOptions = {}): Promise<User> {
-    return this._usersManager.getUserByLogin(email, options);
+  public async getUserByLoginOrCreate(email: string, options: GetUserOptions = {}): Promise<User> {
+    return this._usersManager.getUserByLoginOrCreate(email, options);
   }
 
   /**

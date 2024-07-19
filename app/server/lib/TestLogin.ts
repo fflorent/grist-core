@@ -24,7 +24,7 @@ export async function getTestLoginSystem(): Promise<GristLoginSystem> {
           // Make sure support user has a test api key if needed.
           if (process.env.TEST_SUPPORT_API_KEY) {
             const dbManager = gristServer.getHomeDBManager();
-            const user = await dbManager.getUserByLogin(SUPPORT_EMAIL);
+            const user = await dbManager.getUserByLoginOrCreate(SUPPORT_EMAIL);
             user.apiKey = process.env.TEST_SUPPORT_API_KEY;
             await user.save();
           }

@@ -165,7 +165,7 @@ export function addSiteCommand(program: commander.Command,
       console.log("create a site");
       const profile = {email, name: email};
       const db = await getHomeDBManager();
-      const user = await db.getUserByLogin(email, {profile});
+      const user = await db.getUserByLoginOrCreate(email, {profile});
       db.unwrapQueryResult(await db.addOrg(user, {
         name: domain,
         domain,

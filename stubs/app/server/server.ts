@@ -79,7 +79,7 @@ async function setupDb() {
         throw new Error('need GRIST_DEFAULT_EMAIL to create site');
       }
       const profile = {email, name: email};
-      const user = await db.getUserByLogin(email, {profile});
+      const user = await db.getUserByLoginOrCreate(email, {profile});
       db.unwrapQueryResult(await db.addOrg(user, {
         name: org,
         domain: org,
