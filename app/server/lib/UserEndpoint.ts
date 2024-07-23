@@ -56,7 +56,6 @@ const buildUserRoute = (dbManager: HomeDBManager) => {
 
   userRoute.get('/:id', expressWrap(async (req, res) => {
     const userId = integerParam(req.params.id, 'id');
-    console.log('id = ', userId);
     const user = await dbManager.getUser(userId);
     res.status(200).json(user);
   }));
@@ -64,6 +63,17 @@ const buildUserRoute = (dbManager: HomeDBManager) => {
   userRoute.get('/', expressWrap(async (req, res) => {
     const users = await dbManager.getAllUsers();
     res.status(200).json(users);
+  }));
+
+  userRoute.put('/:id', validate(UserProfile), expressWrap(async (req, res) => {
+    const profile = req.body as Types.UserProfile;
+    const userId = integerParam(req.params.id, 'id');
+    const user = await dbManager.getUser(userId);
+    if (!user) {
+      throw new ApiError('user not found', 404);
+    }
+    // TODO: apply changes here
+    res.status(200).json(user);
   }));
 
   return userRoute;
