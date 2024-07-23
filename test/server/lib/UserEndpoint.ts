@@ -118,5 +118,11 @@ describe('UserEndpoint', function () {
       assert.equal(res.status, 200);
       assert.equal(res.data.name, creationPayload.name);
     });
+
+    it('should return a 404 when the user is not found', async () => {
+      const res = await axios.get(`${userEndpoint}/404`, chimpy);
+      assert.equal(res.status, 404);
+      assert.equal(res.data.error, creationPayload.name);
+    });
   });
 });

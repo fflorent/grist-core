@@ -36,6 +36,24 @@ export const SUPPORT_EMAIL = appSettings.section('access').flag('supportEmail').
 // A list of emails we don't expect to see logins for.
 const NON_LOGIN_EMAILS = [PREVIEWER_EMAIL, EVERYONE_EMAIL, ANONYMOUS_USER_EMAIL];
 
+export class ExtendedUser extends User {
+  public static fromUser(from: User) {
+    const extendedUser = new this();
+    User.merge(extendedUser, from);
+    return extendedUser;
+  }
+
+  private _login: Login;
+  // Is this really needed? See `reload`
+  // https://typeorm.io/repository-api#additional-options
+  public getLogin() {
+    return this.logins?.[0] || this._login;
+  }
+  public setAssociatedLogin(login: Login) {
+    return this._login = login;
+  }
+}
+
 /**
  * Class responsible for Users Management.
  *
