@@ -43,6 +43,15 @@ function validateCore(checker: t.Checker, req: Request, body: any) {
 const buildUserRoute = (dbManager: HomeDBManager) => {
   const userRoute = Router();
 
+  async function findUserOrFail(userId: number) {
+    const user = await dbManager.getUser(userId);
+    if (!user) {
+      throw new ApiError('User not found', 404);
+    }
+    return user;
+  }
+
+
   userRoute.post('/', validate(UserProfile), expressWrap(async function (req, res) {
     // FIXME: should it reject if the user already exist? Or send some flag that it is not a newly created user?
     const profile = req.body as Types.UserProfile;
@@ -56,7 +65,7 @@ const buildUserRoute = (dbManager: HomeDBManager) => {
 
   userRoute.get('/:id', expressWrap(async (req, res) => {
     const userId = integerParam(req.params.id, 'id');
-    const user = await dbManager.getUser(userId);
+    const user = await findUserOrFail(userId);
     res.status(200).json(user);
   }));
 
@@ -66,13 +75,16 @@ const buildUserRoute = (dbManager: HomeDBManager) => {
   }));
 
   userRoute.put('/:id', validate(UserProfile), expressWrap(async (req, res) => {
-    const profile = req.body as Types.UserProfile;
     const userId = integerParam(req.params.id, 'id');
-    const user = await dbManager.getUser(userId);
-    if (!user) {
-      throw new ApiError('user not found', 404);
-    }
+    const user = await findUserOrFail(userId);
     // TODO: apply changes here
+    res.status(200).json(user);
+  }));
+
+  userRoute.delete('/:id', expressWrap(async (req, res) => {
+    const userId = integerParam(req.params.id, 'id');
+    const user = await findUserOrFail(userId);
+    // TODO: delete user here
     res.status(200).json(user);
   }));
 

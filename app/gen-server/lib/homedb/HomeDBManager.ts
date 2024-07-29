@@ -473,8 +473,8 @@ export class HomeDBManager extends EventEmitter {
   }
 
   public async updateUser(userId: number, props: UserProfileChange) {
-    const { user, isWelcomed } = await this._usersManager.updateUser(userId, props);
-    if (user && isWelcomed) {
+    const user = await this._usersManager.updateUser(userId, props);
+    if (user.isWelcomed) {
       this.emit('firstLogin', this.makeFullUser(user));
     }
   }
