@@ -36,21 +36,21 @@ export const SUPPORT_EMAIL = appSettings.section('access').flag('supportEmail').
 // A list of emails we don't expect to see logins for.
 const NON_LOGIN_EMAILS = [PREVIEWER_EMAIL, EVERYONE_EMAIL, ANONYMOUS_USER_EMAIL];
 
-export class ExtendedUser extends User {
-  public static fromUser(from: User) {
-    const extendedUser = new this();
-    User.merge(extendedUser, from);
-    return extendedUser;
+// FIXME: maybe move it to its own module
+export class UserAndLogin {
+  constructor(
+    public readonly user: User,
+    public readonly login: Login
+  ) {
+    user.setLogin(login);
   }
 
-  private _login: Login;
-  // Is this really needed? See `reload`
-  // https://typeorm.io/repository-api#additional-options
-  public getLogin() {
-    return this.logins?.[0] || this._login;
+  public get needsUpdate() {
+    return this.user.needsUpdate || this.login.needsUpdate;
   }
-  public setAssociatedLogin(login: Login) {
-    return this._login = login;
+
+  public async save(manager: EntityManager) {
+    await manager.save([this.user, this.login]);
   }
 }
 
@@ -184,7 +184,9 @@ export class UsersManager {
   ): Promise<User|undefined> {
     const {includePrefs} = options;
     const relations = ["logins"];
-    if (includePrefs) { relations.push("prefs"); }
+    if (includePrefs) {
+      relations.push("prefs");
+    }
     return await User.findOne({where: {id: userId}, relations}) || undefined;
   }
 
@@ -235,9 +237,9 @@ export class UsersManager {
         );
       }
       // Then create a user
-      const {user, login} = this._createUserAndLogin(normalizeEmail(profile.email));
-      await this._addUserInformation({user, login, email: profile.email, profile, manager});
-      return this.getUser(user.id); // Retrieve the user as stored in the database
+      const userAndLogin = this._createUserAndLogin(normalizeEmail(profile.email));
+      await this._addUserInformation({userAndLogin, email: profile.email, profile, manager});
+      return this.getUser(userAndLogin.user.id); // Retrieve the user as stored in the database
     });
   }
 
@@ -265,61 +267,51 @@ export class UsersManager {
         await newUser.save();
       } else {
         // Else update profile and login information from external profile.
-        let updated = false;
         let login: Login = existing.logins[0]!;
         const properEmail = normalizeEmail(profile.email);
 
         if (properEmail !== existing.loginEmail) {
           login = login ?? new Login();
-          login.email = properEmail;
-          login.displayEmail = profile.email;
-          existing.logins.splice(0, 1, login);
-          login.user = existing;
-          updated = true;
+          login.setPropertyIfDifferent('email', properEmail);
+          login.setPropertyIfDifferent('displayEmail', profile.email);
+        }
+        const userAndLogin = new UserAndLogin(existing, login);
+
+        if (profile?.name) {
+          existing.setPropertyIfDifferent('name', profile.name);
         }
 
-        if (profile?.name && profile?.name !== existing.name) {
-          existing.name = profile.name;
-          updated = true;
+        if (profile?.picture) {
+          existing.setPropertyIfDifferent('picture', profile.picture);
         }
 
-        if (profile?.picture && profile?.picture !== existing.picture) {
-          existing.picture = profile.picture;
-          updated = true;
-        }
-
-        if (updated) {
-          await manager.save([existing, login]);
+        if (userAndLogin.needsUpdate) {
+          await userAndLogin.save(manager);
         }
       }
     });
   }
 
   public async updateUser(userId: number, props: UserProfileChange) {
-    let isWelcomed: boolean = false;
-    let user: User|null = null;
-    await this._connection.transaction(async manager => {
-      user = await manager.findOne(User, {relations: ['logins'],
+    return this._connection.transaction(async manager => {
+      const user = await manager.findOne(User, {relations: ['logins'],
                                           where: {id: userId}});
-      let needsSave = false;
       if (!user) { throw new ApiError("unable to find user", 400); }
-      if (props.name && props.name !== user.name) {
-        user.name = props.name;
-        needsSave = true;
+      if (props.name) {
+        user.setPropertyIfDifferent('name', props.name);
       }
-      if (props.isFirstTimeUser !== undefined && props.isFirstTimeUser !== user.isFirstTimeUser) {
-        user.isFirstTimeUser = props.isFirstTimeUser;
-        needsSave = true;
+      if (props.isFirstTimeUser !== undefined) {
+        user.setPropertyIfDifferent('isFirstTimeUser', props.isFirstTimeUser);
         // If we are turning off the isFirstTimeUser flag, then right
         // after this transaction commits is a great time to trigger
         // any automation for first logins
-        if (!props.isFirstTimeUser) { isWelcomed = true; }
+        if (!props.isFirstTimeUser) { user.isWelcomed = true; }
       }
-      if (needsSave) {
+      if (user.needsUpdate) {
         await user.save();
       }
+      return user;
     });
-    return { user, isWelcomed };
   }
 
   // TODO: rather use the updateUser() method, if that makes sense?
@@ -395,23 +387,21 @@ export class UsersManager {
     const {manager: transaction, profile, userOptions} = options;
     const normalizedEmail = normalizeEmail(email);
     return await this._runInTransaction(transaction, async manager => {
-      let user = await this._getUserByLogin(normalizedEmail, manager);
-      let needUpdate = false;
-      let login: Login;
-      if (!user) {
-        ({user, login} = this._createUserAndLogin(normalizedEmail));
-        needUpdate = true;
-      } else {
-        login = user.logins[0];
-      }
-      needUpdate = await this._addUserInformation({user, profile, email, login, userOptions, manager}) || needUpdate;
+      let userAndLogin = await this._getUserByLogin(normalizedEmail, manager);
 
-      if (needUpdate) {
+      if (!userAndLogin) {
+        userAndLogin = this._createUserAndLogin(normalizedEmail);
+      }
+      const needsReload = await this._addUserInformation({
+        userAndLogin, profile, email, userOptions, manager
+      });
+
+      if (needsReload) {
         // We changed the db - reload user in order to give consistent results.
         // In principle this could be optimized, but this is simpler to maintain.
-        user = await this._getUserByLogin(normalizedEmail, manager);
+        userAndLogin = await this._getUserByLogin(normalizedEmail, manager);
       }
-      return user!;
+      return userAndLogin!.user;
     });
   }
 
@@ -676,14 +666,15 @@ export class UsersManager {
    */
   private async _getUserByLogin(
     normalizedEmail: string, manager: EntityManager
-  ): Promise<User|null> {
+  ): Promise<UserAndLogin|null> {
     const userQuery = manager.createQueryBuilder()
       .select('user')
       .from(User, 'user')
       .leftJoinAndSelect('user.logins', 'logins')
       .leftJoinAndSelect('user.personalOrg', 'personalOrg')
       .where('email = :email', {email: normalizedEmail});
-    return userQuery.getOne();
+    const user = await userQuery.getOne();
+    return user ? new UserAndLogin(user, user.logins[0]) : null;
   }
 
   private _createUserAndLogin(normalizedEmail: string) {
@@ -694,41 +685,36 @@ export class UsersManager {
     const login: Login = new Login();
     login.email = normalizedEmail;
     login.user = user;
-    return { user, login };
+    return new UserAndLogin(user, login);
   }
 
   private async _addUserInformation(
-    {user, login, profile, email, userOptions, manager}: {
-      user: User,
-      login: Login,
+    {userAndLogin, profile, email, userOptions, manager}: {
+      userAndLogin: UserAndLogin,
       profile?: UserProfile,
       email: string,
       userOptions?: UserOptions,
       manager: EntityManager
     }) {
-    let needUpdate = false;
+    const {user, login} = userAndLogin;
     // Check that user and login records are up to date.
     if (!user.name) {
       // Set the user's name if our provider knows it. Otherwise use their username
       // from email, for lack of something better. If we don't have a profile at this
       // time, then leave the name blank in the hopes of learning it when the user logs in.
-      user.name = (profile && (profile.name || email.split('@')[0])) || '';
-      needUpdate = true;
+      user.setPropertyIfDifferent('name', (profile && (profile.name || email.split('@')[0])) || '');
     }
-    if (!user.picture && profile && profile.picture) {
+    if (!user.picture) {
       // Set the user's profile picture if our provider knows it.
-      user.picture = profile.picture;
-      needUpdate = true;
+      user.setPropertyIfDifferent('picture', profile?.picture ?? null);
     }
-    if (profile && profile.email && profile.email !== login.displayEmail) {
+    if (profile?.email) {
       // Use provider's version of email address for display.
-      login.displayEmail = profile.email;
-      needUpdate = true;
+      login.setPropertyIfDifferent('displayEmail', profile.email);
     }
 
-    if (profile?.connectId && profile?.connectId !== user.connectId) {
-      user.connectId = profile.connectId;
-      needUpdate = true;
+    if (profile?.connectId) {
+      user.setPropertyIfDifferent('connectId', profile.connectId);
     }
 
     if (!login.displayEmail) {
@@ -736,13 +722,11 @@ export class UsersManager {
       // This could be coming from how someone wrote it in a UserManager dialog, for
       // instance. It will get overwritten when the user logs in if the provider's
       // version is different.
-      login.displayEmail = email;
-      needUpdate = true;
+      login.setPropertyIfDifferent('displayEmail', 'email');
     }
     if (!user.options?.authSubject && userOptions?.authSubject) {
       // Link subject from password-based authentication provider if not previously linked.
-      user.options = {...(user.options ?? {}), authSubject: userOptions.authSubject};
-      needUpdate = true;
+      user.setPropertyIfDifferent('options', {...(user.options ?? {}), authSubject: userOptions.authSubject});
     }
 
     // get date of now (remove milliseconds for compatibility with other
@@ -751,8 +735,7 @@ export class UsersManager {
     nowish.setMilliseconds(0);
     if (profile && !user.firstLoginAt) {
       // set first login time to now
-      user.firstLoginAt = nowish;
-      needUpdate = true;
+      user.setPropertyIfDifferent('firstLoginAt', nowish);
     }
     const getTimestampStartOfDay = (date: Date) => {
       const timestamp = Math.floor(date.getTime() / 1000); // unix timestamp seconds from epoc
@@ -760,12 +743,12 @@ export class UsersManager {
       return startOfDay;
     };
     if (!user.lastConnectionAt || getTimestampStartOfDay(user.lastConnectionAt) !== getTimestampStartOfDay(nowish)) {
-      user.lastConnectionAt = nowish;
-      needUpdate = true;
+      user.setPropertyIfDifferent('lastConnectionAt', nowish);
     }
-    if (needUpdate) {
-      login.user = user;
-      await manager.save([user, login]);
+    let needReload = false;
+    if (userAndLogin.needsUpdate) {
+      await userAndLogin.save(manager);
+      needReload = true;
     }
     if (!user.personalOrg && !NON_LOGIN_EMAILS.includes(login.email)) {
       // Add a personal organization for this user.
@@ -779,7 +762,7 @@ export class UsersManager {
       if (result.status !== 200) {
         throw new Error(result.errMessage);
       }
-      needUpdate = true;
+      needReload = true;
 
       // We just created a personal org; set userOrgPrefs that should apply for new users only.
       const userOrgPrefs: UserOrgPrefs = {showGristTour: true};
@@ -788,7 +771,7 @@ export class UsersManager {
         await this._homeDb.updateOrg({userId: user.id}, orgId, {userOrgPrefs}, manager);
       }
     }
-    return needUpdate;
+    return needReload;
   }
 
   /**
