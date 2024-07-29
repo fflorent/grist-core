@@ -1,9 +1,12 @@
-import {BaseEntity, Column, Entity, JoinColumn, ManyToOne, PrimaryColumn} from "typeorm";
+import {AfterUpdate, BaseEntity, Column, Entity, JoinColumn, ManyToOne, PrimaryColumn} from "typeorm";
 
 import {User} from "./User";
 
+type UpdatableProperties = 'email' | 'displayEmail';
+
 @Entity({name: 'logins'})
 export class Login extends BaseEntity {
+  public needsUpdate: boolean = false;
 
   @PrimaryColumn({type: Number})
   public id: number;
@@ -22,4 +25,16 @@ export class Login extends BaseEntity {
   @ManyToOne(type => User)
   @JoinColumn({name: 'user_id'})
   public user: User;
+
+  public setPropertyIfDifferent<K extends UpdatableProperties, V extends this[K]>(prop: K, value: V){
+    if (this[prop] !== value) {
+      this[prop] = value;
+      this.needsUpdate = true;
+    }
+  }
+
+  @AfterUpdate()
+  public resetNeedsUpdate() {
+    this.needsUpdate = false;
+  }
 }

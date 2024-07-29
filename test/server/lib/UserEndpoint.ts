@@ -1,5 +1,6 @@
+// FIXME: sort and normalize imports
 import assert from 'assert';
-import axios from 'axios';
+import axios, { AxiosRequestConfig } from 'axios';
 import { tmpdir } from 'os';
 import path from 'path';
 import { configForUser } from 'test/gen-server/testUtils';
@@ -7,6 +8,7 @@ import { prepareFilesystemDirectoryForTests } from './helpers/PrepareFilesystemD
 import { EnvironmentSnapshot } from '../testUtils';
 import { prepareDatabase } from './helpers/PrepareDatabase';
 import { TestServer } from './helpers/TestServer';
+import { UserProfile } from 'app/common/UserProfile';
 
 const username = process.env.USER || "nobody";
 const tmpDir = path.join(tmpdir(), `grist_test_${username}_userendpoint`);
@@ -37,48 +39,50 @@ describe('UserEndpoint', function () {
     await server.stop();
   });
 
+  async function createUser(profile: UserProfile, requestConfig = chimpy) {
+    return await axios.post(userEndpoint, profile, requestConfig);
+  }
+
+  async function createUserAndAssertCreated(profile: UserProfile, requestConfig?: AxiosRequestConfig) {
+    const res = await createUser(profile, requestConfig);
+    assert.equal(res.status, 200, `User ${profile.email} should have been created`);
+    return res;
+  }
+
+
   describe('POST /users', function () {
     const validPostPayload = {
       email: 'newUser@example.org',
       name: 'Some User'
     };
 
-    [
-      {
-        username: 'nobody',
-        user: nobody,
-        payload: validPostPayload
-      }, {
-        username: 'kiwi',
-        user: kiwi,
-        payload: validPostPayload
-      },
-    ].forEach((ctx) => {
-      it(`should disallow creating a user when logged in as ${ctx.username}`, async () => {
-        const res = await axios.post(userEndpoint, ctx.payload, ctx.user);
-        assert.equal(res.status, 403);
-      });
+    it('should disallow creating a user when logged in as nobody', async function () {
+      const res = await createUser(validPostPayload, nobody);
+      assert.equal(res.status, 403);
+    });
+
+    it('should disallow creating a user when logged in as kiwi', async function () {
+      const res = await createUser(validPostPayload, kiwi);
+      assert.equal(res.status, 403);
     });
 
     it('should reject user creation with wrong payload', async () => {
-      const res = await axios.post(userEndpoint, {
-        foo: 'bar'
-      }, chimpy);
+      const invalidPayload = {foo: 'bar'} as unknown as any;
+      const res = await createUser(invalidPayload, chimpy);
       assert.equal(res.status, 400);
     });
 
     it('should reject user creation with invalid email', async () => {
-      const res = await axios.post(userEndpoint, {
+      const res = await createUser({
         ...validPostPayload,
         email: 'not-an-email'
       }, chimpy);
       assert.equal(res.status, 400);
-      assert.match(res.data, /Invalid email/);
+      assert.match(res.data.error, /Invalid email/);
     });
 
     it('should create a user', async () => {
-      const res = await axios.post(userEndpoint, validPostPayload, chimpy);
-      assert.equal(res.status, 200);
+      const res = await createUserAndAssertCreated(validPostPayload, chimpy);
       assert.equal(typeof res.data.id, "number");
       assert.equal(res.data.name, validPostPayload.name, 'name should be stored in the User');
       assert.ok(Array.isArray(res.data.logins) && res.data.logins.length === 1, 'logins should be an array of 1');
@@ -88,7 +92,7 @@ describe('UserEndpoint', function () {
     });
 
     it('should disallow 2 users with the same email to exist', async () => {
-      const res = await axios.post(userEndpoint, {...validPostPayload, email: 'chimpy@getgrist.com'}, chimpy);
+      const res = await createUser({...validPostPayload, email: 'chimpy@getgrist.com'}, chimpy);
       assert.equal(res.status, 409); // CONFLICT status code
       assert.match(res.data.error, /already exists/);
     });
@@ -110,9 +114,7 @@ describe('UserEndpoint', function () {
     };
 
     it('should retrieve a user', async () => {
-      const creationRes = await axios.post(userEndpoint, creationPayload, chimpy);
-
-      assert.equal(creationRes.status, 200);
+      const creationRes = await createUserAndAssertCreated(creationPayload);
       const userId = creationRes.data.id;
       const res = await axios.get(`${userEndpoint}/${userId}`, chimpy);
       assert.equal(res.status, 200);
@@ -122,7 +124,38 @@ describe('UserEndpoint', function () {
     it('should return a 404 when the user is not found', async () => {
       const res = await axios.get(`${userEndpoint}/404`, chimpy);
       assert.equal(res.status, 404);
-      assert.equal(res.data.error, creationPayload.name);
+      assert.match(res.data.error, /User not found/);
+    });
+  });
+
+  describe('DELETE /users/:id', function () {
+    async function assertUserDeleted(userId: number) {
+      const res = await axios.get(`${userEndpoint}/${userId}`, chimpy);
+      assert.equal(res.status, 404);
+      assert.match(res.data.error, /not found/);
+    }
+
+    const creationPayload = {
+      email: 'new-user-delete@example.org',
+      name: 'Some User For DELETE /users/:id'
+    };
+
+    it('should return a 404 when the user is not found', async () => {
+      const res = await axios.delete(`${userEndpoint}/404`, chimpy);
+      assert.equal(res.status, 404);
+      assert.match(res.data.error, /User not found/);
+    });
+
+    it('should retrieve a user', async () => {
+      const creationRes = await createUserAndAssertCreated(creationPayload);
+      const userId = creationRes.data.id;
+
+      const res = await axios.delete(`${userEndpoint}/${userId}`, chimpy);
+      assert.equal(res.status, 200);
+      assert.equal(res.data.name, creationPayload.name);
+
+      await assertUserDeleted(userId);
+      // TODO: Also ensure that user's personal org is deleted
     });
   });
 });

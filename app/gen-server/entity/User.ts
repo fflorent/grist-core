@@ -1,17 +1,22 @@
 import {UserOptions} from 'app/common/UserAPI';
 import {nativeValues} from 'app/gen-server/lib/values';
 import {makeId} from 'app/server/lib/idUtils';
-import {BaseEntity, BeforeInsert, Column, Entity, JoinTable, ManyToMany, OneToMany, OneToOne,
-        PrimaryGeneratedColumn} from "typeorm";
+import {
+  AfterUpdate, BaseEntity, BeforeInsert, Column, Entity,
+  JoinTable, ManyToMany, OneToMany, OneToOne,
+  PrimaryGeneratedColumn
+} from "typeorm";
 
 import {Group} from "./Group";
 import {Login} from "./Login";
 import {Organization} from "./Organization";
 import {Pref} from './Pref';
 
+type UpdatableProperties = 'name' | 'apiKey' | 'picture' | 'firstLoginAt' | 'lastConnectionAt' |
+  'options' | 'connectId' | 'isFirstTimeUser';
+
 @Entity({name: 'users'})
 export class User extends BaseEntity {
-
   @PrimaryGeneratedColumn()
   public id: number;
 
@@ -64,6 +69,9 @@ export class User extends BaseEntity {
   @Column({name: 'ref', type: String, nullable: false})
   public ref: string;
 
+  public needsUpdate: boolean = false;
+  public isWelcomed: boolean = false;
+
   @BeforeInsert()
   public async beforeInsert() {
     if (!this.ref) {
@@ -76,8 +84,26 @@ export class User extends BaseEntity {
    * is available
    */
   public get loginEmail(): string|undefined {
-    const login = this.logins && this.logins[0];
-    if (!login) { return undefined; }
-    return login.email;
+    return this.logins?.[0]?.email;
+  }
+
+  public setPropertyIfDifferent<K extends UpdatableProperties, V extends this[K]>(prop: K, value: V){
+    if (this[prop] !== value) {
+      this[prop] = value;
+      this.needsUpdate = true;
+    }
+  }
+
+  public setLogin(login: Login) {
+    if (this.logins?.[0] !== login || login.user !== this) {
+      this.logins = [login];
+      login.user = this;
+    }
+  }
+
+  // FIXME: test this is called
+  @AfterUpdate()
+  public resetNeedsUpdate() {
+    this.needsUpdate = false;
   }
 }
