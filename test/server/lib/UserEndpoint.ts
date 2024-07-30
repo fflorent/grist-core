@@ -135,9 +135,14 @@ describe('UserEndpoint', function () {
       assert.match(res.data.error, /not found/);
     }
 
-    const creationPayload = {
+    async function assertUserOrgDeleted(userId: number) {
+      throw new Error('todo');
+    }
+
+    const creationPayload: UserProfile = {
       email: 'new-user-delete@example.org',
-      name: 'Some User For DELETE /users/:id'
+      name: 'Some User For DELETE /users/:id',
+      // FIXME: add ApiKey here? Relevant in most cases?
     };
 
     it('should return a 404 when the user is not found', async () => {
@@ -155,7 +160,7 @@ describe('UserEndpoint', function () {
       assert.equal(res.data.name, creationPayload.name);
 
       await assertUserDeleted(userId);
-      // TODO: Also ensure that user's personal org is deleted
+      await assertUserOrgDeleted(userId);
     });
   });
 });
