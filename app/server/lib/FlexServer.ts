@@ -1152,6 +1152,7 @@ export class FlexServer implements GristServer {
 
 
     const userRoute = buildUserRoute(this._dbManager);
+    // TODO: should rather be under /api/users/
     this.app.use('/users/',
       this._userIdMiddleware,
       forcedLoginMiddleware,
