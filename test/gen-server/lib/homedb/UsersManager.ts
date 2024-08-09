@@ -250,7 +250,7 @@ describe('UsersManager', function () {
     }
 
     async function getOrCreateUser(localPart: string, options?: GetUserOptions) {
-      return db.getUserByLogin(makeEmail(localPart), options);
+      return db.getUserByLoginOrCreate(makeEmail(localPart), options);
     }
 
     function makeEmail(localPart: string) {
@@ -716,14 +716,14 @@ describe('UsersManager', function () {
       });
     });
 
-    describe('getUserByLogin()', function () {
+    describe('getUserByLoginOrCreate()', function () {
       it('should create a user when none exist with the corresponding email', async function () {
-        const localPart = ensureUnique('getuserbylogin-creates-user-when-not-already-exists');
+        const localPart = ensureUnique('getuserbyloginorcreate-creates-user-when-not-already-exists');
         const email = makeEmail(localPart);
         sandbox.useFakeTimers(42_000);
         assert.notExists(await db.getExistingUserByLogin(email));
 
-        const user = await db.getUserByLogin(makeEmail(localPart.toUpperCase()));
+        const user = await db.getUserByLoginOrCreate(makeEmail(localPart.toUpperCase()));
 
         assert.isTrue(user.isFirstTimeUser, 'should be marked as first time user');
         assert.equal(user.loginEmail, email);
@@ -735,9 +735,9 @@ describe('UsersManager', function () {
       });
 
       it('should create a personnal organization for the new user', async function () {
-        const localPart = ensureUnique('getuserbylogin-creates-personnal-org');
+        const localPart = ensureUnique('getuserbyloginorcreate-creates-personnal-org');
 
-        const user = await db.getUserByLogin(makeEmail(localPart));
+        const user = await db.getUserByLoginOrCreate(makeEmail(localPart));
 
         const org = await getPersonalOrg(user);
         assertExists(org.data, 'should have retrieved personnal org data');
@@ -745,15 +745,15 @@ describe('UsersManager', function () {
       });
 
       it('should not create organizations for non-login emails', async function () {
-        const user = await db.getUserByLogin(EVERYONE_EMAIL);
+        const user = await db.getUserByLoginOrCreate(EVERYONE_EMAIL);
         assert.notExists(user.personalOrg);
       });
 
       it('should not update user information when no profile is passed', async function () {
-        const localPart = ensureUnique('getuserbylogin-does-not-update-without-profile');
+        const localPart = ensureUnique('getuserbyloginorcreate-does-not-update-without-profile');
 
-        const userFirstCall = await db.getUserByLogin(makeEmail(localPart));
-        const userSecondCall = await db.getUserByLogin(makeEmail(localPart));
+        const userFirstCall = await db.getUserByLoginOrCreate(makeEmail(localPart));
+        const userSecondCall = await db.getUserByLoginOrCreate(makeEmail(localPart));
 
         assert.deepEqual(userFirstCall, userSecondCall);
       });
@@ -761,25 +761,25 @@ describe('UsersManager', function () {
       // FIXME: why using Sinon.useFakeTimers() makes user.lastConnectionAt a string instead of a Date
       it.skip('should update lastConnectionAt only for different days', async function () {
         const fakeTimer = sandbox.useFakeTimers(0);
-        const localPart = ensureUnique('getuserbylogin-updates-last_connection_at-for-different-days');
-        let user = await db.getUserByLogin(makeEmail(localPart));
+        const localPart = ensureUnique('getuserbyloginorcreate-updates-last_connection_at-for-different-days');
+        let user = await db.getUserByLoginOrCreate(makeEmail(localPart));
         const epochDateTime = '1970-01-01 00:00:00.000';
         assert.equal(String(user.lastConnectionAt), epochDateTime);
 
         await fakeTimer.tickAsync(42_000);
-        user = await db.getUserByLogin(makeEmail(localPart));
+        user = await db.getUserByLoginOrCreate(makeEmail(localPart));
         assert.equal(String(user.lastConnectionAt), epochDateTime);
 
         await fakeTimer.tickAsync('1d');
-        user = await db.getUserByLogin(makeEmail(localPart));
+        user = await db.getUserByLoginOrCreate(makeEmail(localPart));
         assert.match(String(user.lastConnectionAt), /^1970-01-02/);
       });
 
       describe('when passing information to update (using `profile`)', function () {
         it('should populate the firstTimeLogin and deduce the name from the email', async function () {
           sandbox.useFakeTimers(42_000);
-          const localPart = ensureUnique('getuserbylogin-with-profile-populates-first_time_login-and-name');
-          const user = await db.getUserByLogin(makeEmail(localPart), {
+          const localPart = ensureUnique('getuserbyloginorcreate-with-profile-populates-first_time_login-and-name');
+          const user = await db.getUserByLoginOrCreate(makeEmail(localPart), {
             profile: {name: '', email: makeEmail(localPart)}
           });
           assert.equal(user.name, localPart);
@@ -788,14 +788,16 @@ describe('UsersManager', function () {
         });
 
         it('should populate user with any passed information', async function () {
-          const localPart = ensureUnique('getuserbylogin-with-profile-populates-user-with-passed-info_OLD');
-          await db.getUserByLogin(makeEmail(localPart));
+          const localPart = ensureUnique('getuserbyloginorcreate-with-profile-populates-user-with-passed-info_OLD');
+          await db.getUserByLoginOrCreate(makeEmail(localPart));
           const originalNormalizedLoginEmail = makeEmail(localPart.toLowerCase());
 
-          const profile = makeProfile(makeEmail('getuserbylogin-with-profile-populates-user-with-passed-info_NEW'));
+          const profile = makeProfile(
+            makeEmail('getuserbyloginorcreate-with-profile-populates-user-with-passed-info_NEW')
+          );
           const userOptions: UserOptions = {authSubject: 'my-auth-subject'};
 
-          const updatedUser = await db.getUserByLogin(makeEmail(localPart), { profile, userOptions });
+          const updatedUser = await db.getUserByLoginOrCreate(makeEmail(localPart), { profile, userOptions });
           assert.deepInclude(updatedUser, {
             name: profile.name,
             connectId: profile.connectId,
@@ -827,12 +829,14 @@ describe('UsersManager', function () {
         return error;
       }
 
-      it('should work just like getUserByLogin', async function () {
-        await ensureGetUserByLoginWithRetryWorks( ensureUnique('getuserbyloginwithretry-works-like-getuserbylogin'));
+      it('should work just like getUserByLoginOrCreate', async function () {
+        await ensureGetUserByLoginWithRetryWorks(
+          ensureUnique('getuserbyloginwithretry-works-like-getuserbyloginorcreate')
+        );
       });
 
       it('should make a second attempt on special error', async function () {
-        sandbox.stub(UsersManager.prototype, 'getUserByLogin')
+        sandbox.stub(UsersManager.prototype, 'getUserByLoginOrCreate')
           .onFirstCall().throws(makeQueryFailedError())
           .callThrough();
         await ensureGetUserByLoginWithRetryWorks('getuserbyloginwithretry-makes-a-single-retry');
@@ -840,7 +844,7 @@ describe('UsersManager', function () {
 
       it('should reject after 2 attempts', async function () {
         const secondError = makeQueryFailedError();
-        sandbox.stub(UsersManager.prototype, 'getUserByLogin')
+        sandbox.stub(UsersManager.prototype, 'getUserByLoginOrCreate')
           .onFirstCall().throws(makeQueryFailedError())
           .onSecondCall().throws(secondError)
           .callThrough();
@@ -853,7 +857,7 @@ describe('UsersManager', function () {
 
       it('should reject immediately if the error is not a QueryFailedError', async function () {
         const errorMsg = 'my error';
-        sandbox.stub(UsersManager.prototype, 'getUserByLogin')
+        sandbox.stub(UsersManager.prototype, 'getUserByLoginOrCreate')
           .onFirstCall().rejects(new Error(errorMsg))
           .callThrough();
 

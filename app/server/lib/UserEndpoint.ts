@@ -84,7 +84,7 @@ const buildUserRoute = (dbManager: HomeDBManager) => {
   userRoute.delete('/:id', expressWrap(async (req, res) => {
     const userId = integerParam(req.params.id, 'id');
     const user = await findUserOrFail(userId);
-    const userName = req.param.name;
+    // const userName = req.param.name;
     // FIXME: this endpoint already exist in ApiServer
     res.status(200).json(user);
   }));

@@ -300,7 +300,7 @@ export class UsersManager {
       if (props.name) {
         user.setPropertyIfDifferent('name', props.name);
       }
-      if (props.isFirstTimeUser !== undefined) {
+      if (props.isFirstTimeUser !== undefined && user.isFirstTimeUser !== props.isFirstTimeUser) {
         user.setPropertyIfDifferent('isFirstTimeUser', props.isFirstTimeUser);
         // If we are turning off the isFirstTimeUser flag, then right
         // after this transaction commits is a great time to trigger
@@ -722,7 +722,7 @@ export class UsersManager {
       // This could be coming from how someone wrote it in a UserManager dialog, for
       // instance. It will get overwritten when the user logs in if the provider's
       // version is different.
-      login.setPropertyIfDifferent('displayEmail', 'email');
+      login.setPropertyIfDifferent('displayEmail', email);
     }
     if (!user.options?.authSubject && userOptions?.authSubject) {
       // Link subject from password-based authentication provider if not previously linked.
