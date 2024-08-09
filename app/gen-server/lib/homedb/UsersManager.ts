@@ -229,7 +229,7 @@ export class UsersManager {
   public createUser(profile: UserProfile): Promise<User|undefined> {
     return this._connection.transaction(async manager => {
       // First ensure that the user does not exist yet
-      const existingUser = await this._getUserByLogin(profile.email, manager);
+      const existingUser = await this.getExistingUserByLogin(profile.email, manager);
       if (existingUser) {
         throw new ApiError(
           `User creation failed: a user with the same email address (${profile.email}) already exists.`,
@@ -387,21 +387,28 @@ export class UsersManager {
     const {manager: transaction, profile, userOptions} = options;
     const normalizedEmail = normalizeEmail(email);
     return await this._runInTransaction(transaction, async manager => {
-      let userAndLogin = await this._getUserByLogin(normalizedEmail, manager);
+      const userAndLogin = await this._getUserByLogin(normalizedEmail, manager) ??
+        this._createUserAndLogin(normalizedEmail);
 
-      if (!userAndLogin) {
-        userAndLogin = this._createUserAndLogin(normalizedEmail);
-      }
-      const needsReload = await this._addUserInformation({
+      await this._addUserInformation({
         userAndLogin, profile, email, userOptions, manager
       });
 
-      if (needsReload) {
+      let userInfoUpdated = false;
+      if (userAndLogin.needsUpdate) {
+        await userAndLogin.save(manager);
+        userInfoUpdated = true;
+      }
+
+      const orgAdded = await this._addPersonalOrgIfMissing(userAndLogin, manager);
+
+      if (userInfoUpdated || orgAdded) {
         // We changed the db - reload user in order to give consistent results.
         // In principle this could be optimized, but this is simpler to maintain.
-        userAndLogin = await this._getUserByLogin(normalizedEmail, manager);
+        return (await this._getUserByLogin(normalizedEmail, manager))!.user;
       }
-      return userAndLogin!.user;
+
+      return userAndLogin.user;
     });
   }
 
@@ -688,6 +695,33 @@ export class UsersManager {
     return new UserAndLogin(user, login);
   }
 
+  private async _addPersonalOrgIfMissing(userAndLogin: UserAndLogin, manager: EntityManager) {
+    let updated = false;
+    const {user, login} = userAndLogin;
+    if (!user.personalOrg && !NON_LOGIN_EMAILS.includes(login.email)) {
+      // Add a personal organization for this user.
+      // We don't add a personal org for anonymous/everyone/previewer "users" as it could
+      // get a bit confusing.
+      const result = await this._homeDb.addOrg(user, {name: "Personal"}, {
+        setUserAsOwner: true,
+        useNewPlan: true,
+        product: PERSONAL_FREE_PLAN,
+      }, manager);
+      if (result.status !== 200) {
+        throw new Error(result.errMessage);
+      }
+
+      // We just created a personal org; set userOrgPrefs that should apply for new users only.
+      const userOrgPrefs: UserOrgPrefs = {showGristTour: true};
+      const orgId = result.data;
+      if (orgId) {
+        await this._homeDb.updateOrg({userId: user.id}, orgId, {userOrgPrefs}, manager);
+      }
+      updated = true;
+    }
+    return updated;
+  }
+
   private async _addUserInformation(
     {userAndLogin, profile, email, userOptions, manager}: {
       userAndLogin: UserAndLogin,
@@ -745,33 +779,6 @@ export class UsersManager {
     if (!user.lastConnectionAt || getTimestampStartOfDay(user.lastConnectionAt) !== getTimestampStartOfDay(nowish)) {
       user.setPropertyIfDifferent('lastConnectionAt', nowish);
     }
-    let needReload = false;
-    if (userAndLogin.needsUpdate) {
-      await userAndLogin.save(manager);
-      needReload = true;
-    }
-    if (!user.personalOrg && !NON_LOGIN_EMAILS.includes(login.email)) {
-      // Add a personal organization for this user.
-      // We don't add a personal org for anonymous/everyone/previewer "users" as it could
-      // get a bit confusing.
-      const result = await this._homeDb.addOrg(user, {name: "Personal"}, {
-        setUserAsOwner: true,
-        useNewPlan: true,
-        product: PERSONAL_FREE_PLAN,
-      }, manager);
-      if (result.status !== 200) {
-        throw new Error(result.errMessage);
-      }
-      needReload = true;
-
-      // We just created a personal org; set userOrgPrefs that should apply for new users only.
-      const userOrgPrefs: UserOrgPrefs = {showGristTour: true};
-      const orgId = result.data;
-      if (orgId) {
-        await this._homeDb.updateOrg({userId: user.id}, orgId, {userOrgPrefs}, manager);
-      }
-    }
-    return needReload;
   }
 
   /**
