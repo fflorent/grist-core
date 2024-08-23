@@ -32,13 +32,13 @@ describe('HomeDBManager', function() {
   });
 
   it('can find existing user by email', async function() {
-    const user = await home.getUserByLogin('chimpy@getgrist.com');
+    const user = await home.getUserByLoginOrCreate('chimpy@getgrist.com');
     assert.equal(user.name, 'Chimpy');
   });
 
   it('can create new user by email, with personal org', async function() {
     const profile = {email: 'unseen@getgrist.com', name: 'Unseen'};
-    const user = await home.getUserByLogin('unseen@getgrist.com', {profile});
+    const user = await home.getUserByLoginOrCreate('unseen@getgrist.com', {profile});
     assert.equal(user.name, 'Unseen');
     const orgs = await home.getOrgs(user.id, null);
     assert.isAtLeast(orgs.data!.length, 1);
@@ -63,33 +63,33 @@ describe('HomeDBManager', function() {
 
   it('can accumulate profile information', async function() {
     // log in without a name
-    let user = await home.getUserByLogin('unseen2@getgrist.com');
+    let user = await home.getUserByLoginOrCreate('unseen2@getgrist.com');
     // name is blank
     assert.equal(user.name, '');
     // log in with a name
     const profile: UserProfile = {email: 'unseen2@getgrist.com', name: 'Unseen2'};
-    user = await home.getUserByLogin('unseen2@getgrist.com', {profile});
+    user = await home.getUserByLoginOrCreate('unseen2@getgrist.com', {profile});
     // name is now set
     assert.equal(user.name, 'Unseen2');
     // log in without a name
-    user = await home.getUserByLogin('unseen2@getgrist.com');
+    user = await home.getUserByLoginOrCreate('unseen2@getgrist.com');
     // name is still set
     assert.equal(user.name, 'Unseen2');
     // no picture yet
     assert.equal(user.picture, null);
     // log in with picture link
     profile.picture = 'http://picture.pic';
-    user = await home.getUserByLogin('unseen2@getgrist.com', {profile});
+    user = await home.getUserByLoginOrCreate('unseen2@getgrist.com', {profile});
     // now should have a picture link
     assert.equal(user.picture, 'http://picture.pic');
     // log in without picture
-    user = await home.getUserByLogin('unseen2@getgrist.com');
+    user = await home.getUserByLoginOrCreate('unseen2@getgrist.com');
     // should still have picture link
     assert.equal(user.picture, 'http://picture.pic');
   });
 
   it('can add an org', async function() {
-    const user = await home.getUserByLogin('chimpy@getgrist.com');
+    const user = await home.getUserByLoginOrCreate('chimpy@getgrist.com');
     const orgId = (await home.addOrg(user, {name: 'NewOrg', domain: 'novel-org'}, teamOptions)).data!;
     const org = await home.getOrg({userId: user.id}, orgId);
     assert.equal(org.data!.name, 'NewOrg');
@@ -99,7 +99,7 @@ describe('HomeDBManager', function() {
   });
 
   it('creates default plan if defined', async function() {
-    const user = await home.getUserByLogin('chimpy@getgrist.com');
+    const user = await home.getUserByLoginOrCreate('chimpy@getgrist.com');
     const oldEnv = new testUtils.EnvironmentSnapshot();
     try {
       // Set the default product to be the free plan.
@@ -132,7 +132,7 @@ describe('HomeDBManager', function() {
   });
 
   it('cannot duplicate a domain', async function() {
-    const user = await home.getUserByLogin('chimpy@getgrist.com');
+    const user = await home.getUserByLoginOrCreate('chimpy@getgrist.com');
     const domain = 'repeated-domain';
     const result = await home.addOrg(user, {name: `${domain}!`, domain}, teamOptions);
     const orgId = result.data!;
@@ -143,7 +143,7 @@ describe('HomeDBManager', function() {
   });
 
   it('cannot add an org with a (blacklisted) dodgy domain', async function() {
-    const user = await home.getUserByLogin('chimpy@getgrist.com');
+    const user = await home.getUserByLoginOrCreate('chimpy@getgrist.com');
     const userId = user.id;
     const misses = [
       'thing!', ' thing', 'ww', 'docs-999', 'o-99', '_domainkey', 'www', 'api',
@@ -188,7 +188,7 @@ describe('HomeDBManager', function() {
     });
 
     // Fetch the doc and check that the updatedAt value is as expected.
-    const kiwi = await home.getUserByLogin('kiwi@getgrist.com');
+    const kiwi = await home.getUserByLoginOrCreate('kiwi@getgrist.com');
     const resp1 = await home.getOrgWorkspaces({userId: kiwi.id}, primatelyOrgId);
     assert.equal(resp1.status, 200);
 
@@ -339,7 +339,7 @@ describe('HomeDBManager', function() {
   });
 
   it('can fork docs', async function() {
-    const user1 = await home.getUserByLogin('kiwi@getgrist.com');
+    const user1 = await home.getUserByLoginOrCreate('kiwi@getgrist.com');
     const user1Id = user1.id;
     const orgId = await home.testGetId('Fish') as number;
     const doc1Id = await home.testGetId('Shark') as string;
@@ -392,7 +392,7 @@ describe('HomeDBManager', function() {
     );
 
     // Now fork "Shark" as Chimpy, and check that Kiwi's forks aren't listed.
-    const user2 = await home.getUserByLogin('chimpy@getgrist.com');
+    const user2 = await home.getUserByLoginOrCreate('chimpy@getgrist.com');
     const user2Id = user2.id;
     const resp4 = await home.getOrgWorkspaces({userId: user2Id}, orgId);
     const resp4Doc = resp4.data![0].docs.find((d: any) => d.name === 'Shark');
