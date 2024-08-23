@@ -258,10 +258,10 @@ describe('removedAt', function() {
           'test3@getgrist.com': 'editors',
         }
       });
-      const userRef = (email: string) => home.dbManager.getUserByLogin(email).then((user) => user.ref);
-      const idTest1 = (await home.dbManager.getUserByLogin("test1@getgrist.com"))!.id;
-      const idTest2 = (await home.dbManager.getUserByLogin("test2@getgrist.com"))!.id;
-      const idTest3 = (await home.dbManager.getUserByLogin("test3@getgrist.com"))!.id;
+      const userRef = (email: string) => home.dbManager.getUserByLoginOrCreate(email).then((user) => user.ref);
+      const idTest1 = (await home.dbManager.getUserByLoginOrCreate("test1@getgrist.com"))!.id;
+      const idTest2 = (await home.dbManager.getUserByLoginOrCreate("test2@getgrist.com"))!.id;
+      const idTest3 = (await home.dbManager.getUserByLoginOrCreate("test3@getgrist.com"))!.id;
       // Create one extra document, with one extra user.
       const extraDocId = await api.newDoc({name: 'doc'}, ws);
       await api.updateDocPermissions(extraDocId, {
