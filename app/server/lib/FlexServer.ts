@@ -89,7 +89,7 @@ import * as path from 'path';
 import * as serveStatic from "serve-static";
 import {ConfigBackendAPI} from "app/server/lib/ConfigBackendAPI";
 import {IGristCoreConfig} from "app/server/lib/configCore";
-import {checkPermissionToUserEndpoint, buildUserRoute} from './UserEndpoint';
+import {buildUserRoute, checkPermissionToUserEndpoint} from './UserEndpoint';
 
 // Health checks are a little noisy in the logs, so we don't show them all.
 // We show the first N health checks:
