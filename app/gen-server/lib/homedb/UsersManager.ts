@@ -387,25 +387,24 @@ export class UsersManager {
     const {manager: transaction, profile, userOptions} = options;
     const normalizedEmail = normalizeEmail(email);
     return await this._runInTransaction(transaction, async manager => {
-      const userAndLogin = await this._getUserByLogin(normalizedEmail, manager) ??
+      const userAndLogin = await this._getUserAndLoginByEmail(normalizedEmail, manager) ??
         this._createUserAndLogin(normalizedEmail);
 
       await this._addUserInformation({
         userAndLogin, profile, email, userOptions, manager
       });
 
-      let userInfoUpdated = false;
-      if (userAndLogin.needsUpdate) {
+      const userInfoModified = userAndLogin.needsUpdate;
+      if (userInfoModified) {
         await userAndLogin.save(manager);
-        userInfoUpdated = true;
       }
 
       const orgAdded = await this._addPersonalOrgIfMissing(userAndLogin, manager);
 
-      if (userInfoUpdated || orgAdded) {
+      if (userInfoModified || orgAdded) {
         // We changed the db - reload user in order to give consistent results.
         // In principle this could be optimized, but this is simpler to maintain.
-        return (await this._getUserByLogin(normalizedEmail, manager))!.user;
+        return (await this._getUserAndLoginByEmail(normalizedEmail, manager))!.user;
       }
 
       return userAndLogin.user;
@@ -668,10 +667,10 @@ export class UsersManager {
   }
 
   /**
-   * Only gets a user by its email.
+   * Gets a user by its email.
    * Does not create it if missing
    */
-  private async _getUserByLogin(
+  private async _getUserAndLoginByEmail(
     normalizedEmail: string, manager: EntityManager
   ): Promise<UserAndLogin|null> {
     const userQuery = manager.createQueryBuilder()
