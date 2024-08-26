@@ -89,7 +89,6 @@ import * as path from 'path';
 import * as serveStatic from "serve-static";
 import {ConfigBackendAPI} from "app/server/lib/ConfigBackendAPI";
 import {IGristCoreConfig} from "app/server/lib/configCore";
-import {buildUserRoute, checkPermissionToUserEndpoint} from './UserEndpoint';
 
 // Health checks are a little noisy in the logs, so we don't show them all.
 // We show the first N health checks:
@@ -1149,17 +1148,6 @@ export class FlexServer implements GristServer {
       plugins : (await this._addPluginManager()).getPlugins(),
       gristServer: this,
     });
-
-
-    const userRoute = buildUserRoute(this._dbManager);
-    // TODO: should rather be under /api/users/
-    this.app.use('/users/',
-      this._userIdMiddleware,
-      forcedLoginMiddleware,
-      checkPermissionToUserEndpoint,
-      userRoute,
-      jsonErrorHandler
-    );
   }
 
   public async addLoginMiddleware() {
