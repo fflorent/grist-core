@@ -582,6 +582,11 @@ export class UsersManager {
     });
   }
 
+  public async getUsers() {
+    return await User.find({relations: ["logins"]});
+  }
+
+
   /**
    * ==================================
    *
@@ -676,10 +681,6 @@ export class UsersManager {
    */
   public getExcludedUserIds(): number[] {
     return [this.getSupportUserId(), this.getAnonymousUserId(), this.getEveryoneUserId()];
-  }
-
-  public async getUsers() {
-    return await User.find({relations: ["logins"]});
   }
 
   /**
