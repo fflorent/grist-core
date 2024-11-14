@@ -100,6 +100,11 @@ class ErrorWithUserFriendlyMessage extends Error {
   }
 }
 
+interface OIDCConfigDependencies {
+  sessions: Sessions;
+  sendAppPage: SendAppPageFunction;
+}
+
 export class OIDCConfig {
   /**
    * Handy alias to create an OIDCConfig instance and initialize it.
@@ -119,10 +124,13 @@ export class OIDCConfig {
   private _ignoreEmailVerified: boolean;
   private _protectionManager: ProtectionsManager;
   private _acrValues?: string;
+  private _sendAppPage: SendAppPageFunction;
 
   protected constructor(
-    private _sendAppPage: SendAppPageFunction
-  ) {}
+    sendAppPage: SendAppPageFunction
+  ) {
+    this._sendAppPage = sendAppPage;
+  }
 
   public async initOIDC(): Promise<void> {
     const section = appSettings.section('login').section('system').section('oidc');
@@ -397,13 +405,17 @@ export async function getOIDCLoginSystem(): Promise<GristLoginSystem | undefined
   if (!process.env.GRIST_OIDC_IDP_ISSUER) { return undefined; }
   return {
     async getMiddleware(gristServer: GristServer) {
-      const config = await OIDCConfig.build(gristServer.sendAppPage.bind(gristServer));
+      const deps: OIDCConfigDependencies = {
+        sessions: gristServer.getSessions(),
+        sendAppPage: gristServer.sendAppPage.bind(gristServer),
+      };
+      const config = await OIDCConfig.build(deps.sendAppPage);
       return {
         getLoginRedirectUrl: config.getLoginRedirectUrl.bind(config),
         getSignUpRedirectUrl: config.getLoginRedirectUrl.bind(config),
         getLogoutRedirectUrl: config.getLogoutRedirectUrl.bind(config),
         async addEndpoints(app: express.Express) {
-          config.addEndpoints(app, gristServer.getSessions());
+          config.addEndpoints(app, deps.sessions);
           return 'oidc';
         },
       };
